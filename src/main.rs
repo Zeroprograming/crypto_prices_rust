@@ -1,14 +1,6 @@
-
 use constants::ErrorResponse;
 use reqwest::{self};
-use std::{collections::HashMap};
-use serde_json::{self, Value};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CoinData {
-    usd: f64
-}
+use std::collections::HashMap;
 
 mod constants {
     #[derive(Debug)]
@@ -26,31 +18,34 @@ mod constants {
 
 #[tokio::main]
 async fn main() {
-    let mut coin: String = String::new();
-    let result = std::io::stdin().read_line(&mut coin);
+    loop {
+        let mut coin: String = String::new();
+        println!("Enter a coin name (or 'exit' to quit):");
+        std::io::stdin().read_line(&mut coin).unwrap();
+        let coin = coin.trim().to_lowercase();
 
-    match result {
-        Ok(_) => {
-            println!("Coin: {coin}");
-            let price = get_price(&coin).await;
-            match  price {
-                Ok(price) => {
-                    println!("Price: {}", price);
-                }
-                Err(error) => {
-                    println!("Error: {}", error);
-                }
-            }
+        if coin == "exit" {
+            println!("Exiting...");
+            break;
         }
-        Err(error) => {
-            println!("Error: {}", error);
+
+        let price = get_price(&coin).await;
+        match price {
+            Ok(price_usd) => {
+                println!("Price: {:?}", price_usd.parse::<f64>().unwrap());
+            }
+            Err(error) => {
+                println!("Error: {}", error);
+            }
         }
     }
 }
 
-async fn get_price(_coin: &str) -> Result<String, ErrorResponse>{
-    //Request to API
-    let url = format!("https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd", _coin);
+async fn get_price(coin: &str) -> Result<String, ErrorResponse> {
+    let url = format!(
+        "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd",
+        coin
+    );
 
     let response = match reqwest::get(&url).await {
         Ok(resp) => resp,
@@ -63,7 +58,7 @@ async fn get_price(_coin: &str) -> Result<String, ErrorResponse>{
         }
     };
 
-    let json_response: String = match response.json().await {
+    let json_response: HashMap<String, HashMap<String, f64>> = match response.json().await {
         Ok(json) => json,
         Err(error) => {
             println!("Error: {}", error);
@@ -74,11 +69,14 @@ async fn get_price(_coin: &str) -> Result<String, ErrorResponse>{
         }
     };
 
-    println!("Struct: \n {:#?}", json_response);
-    
-    Err(ErrorResponse{
+    for (_key, value) in &json_response {
+        if let Some(price_data) = value.get("usd") {
+            return Ok(price_data.to_string());
+        }
+    }
+
+    Err(ErrorResponse {
         error: "Coin not found".to_string(),
         status: "404".to_string(),
     })
-    // return error
 }
