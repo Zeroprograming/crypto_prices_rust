@@ -1,7 +1,3 @@
-use constants::ErrorResponse;
-use reqwest::{self};
-use std::collections::HashMap;
-
 mod constants {
     #[derive(Debug)]
     pub struct ErrorResponse {
@@ -32,7 +28,7 @@ async fn main() {
         let price = get_price(&coin).await;
         match price {
             Ok(price_usd) => {
-                println!("Price: {:?}", price_usd.parse::<f64>().unwrap());
+                println!("Price: {:?}", price_usd);
             }
             Err(error) => {
                 println!("Error: {}", error);
@@ -41,42 +37,19 @@ async fn main() {
     }
 }
 
-async fn get_price(coin: &str) -> Result<String, ErrorResponse> {
+async fn get_price(coin: &str) -> Result<f64, reqwest::Error> {
     let url = format!(
         "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd",
         coin
     );
 
-    let response = match reqwest::get(&url).await {
-        Ok(resp) => resp,
-        Err(error) => {
-            println!("Error: {}", error);
-            return Err(ErrorResponse {
-                error: error.to_string(),
-                status: "500".to_string(),
-            });
-        }
-    };
 
-    let json_response: HashMap<String, HashMap<String, f64>> = match response.json().await {
-        Ok(json) => json,
-        Err(error) => {
-            println!("Error: {}", error);
-            return Err(ErrorResponse {
-                error: error.to_string(),
-                status: "500".to_string(),
-            });
-        }
-    };
+    let res: serde_json::Value = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await?
+        .json()
+        .await?;
 
-    for (_key, value) in &json_response {
-        if let Some(price_data) = value.get("usd") {
-            return Ok(price_data.to_string());
-        }
-    }
-
-    Err(ErrorResponse {
-        error: "Coin not found".to_string(),
-        status: "404".to_string(),
-    })
+    Ok(res[coin]["usd"].to_owned().as_f64().unwrap())
 }
